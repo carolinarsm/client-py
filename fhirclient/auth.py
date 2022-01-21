@@ -2,12 +2,13 @@
 
 import uuid
 import logging
-try:                                # Python 2.x
-    import urlparse
-    from urllib import urlencode
-except Exception as e:              # Python 3
-    import urllib.parse as urlparse
-    from urllib.parse import urlencode
+
+import urllib.parse as urlparse
+from urllib.parse import urlencode
+
+#from fhirclient.server import FHIRServer
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -261,6 +262,7 @@ class FHIROAuth2Auth(FHIRAuth):
             'state': self.auth_state,
         }
     
+    
     def _request_access_token(self, server, params):
         """ Requests an access token from the instance's server via a form POST
         request, remembers the token (and patient id if there is one) or
@@ -398,3 +400,5 @@ class FHIROAuth2Auth(FHIRAuth):
 # register classes
 FHIRAuth.register()
 FHIROAuth2Auth.register()
+
+
