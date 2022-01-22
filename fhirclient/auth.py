@@ -6,11 +6,51 @@ import logging
 import urllib.parse as urlparse
 from urllib.parse import urlencode
 
+from  pathlib import Path
+from datetime import datetime
+
+from oauthlib.oauth2.rfc6749.tokens import TokenBase
+from authlib.jose import jwt  # this is from autlib
+
 #from fhirclient.server import FHIRServer
 
-
+JWT_JOSE_HEADER = {
+    "alg": "RS384",
+    "typ": "JWT"
+    }
+JWT_TOKEN_TYPE = "single use JWT - RS384"
 
 logger = logging.getLogger(__name__)
+
+class JWTRS384Generator(TokenBase):
+    """RFC7519, JSON Web Token (JWT)"""
+    header = JWT_JOSE_HEADER
+
+    def __init__(self, issuer=None, token_uri=None):
+        self.issuer = issuer # client_id
+        self.token_uri = token_uri # token endpoint
+
+    def _generate_signed_jwt(self, client_secret=None):       
+        if not client_secret:
+            raise ValueError('Client secret must be valid string')
+        if not self.issuer or not self.token_uri:
+            raise ValueError('Invalid issuer and/or token_uri')
+
+        currentTime = int(((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000) / 1000)
+        dt = 40        
+        token = jwt.encode(
+            header=self.header,
+            payload={
+                "jti": str(uuid.uuid4()),
+                "aud": self.token_uri,
+                "iss": self.issuer,
+                "sub": self.issuer,
+                "iat": currentTime,
+                "exp": currentTime + dt
+            }, 
+            key=client_secret)
+        token = token.decode('utf-8', errors='strict')
+        return token
 
 class FHIRAuth(object):
     """ Superclass to handle authorization flow and state.
@@ -250,17 +290,51 @@ class FHIROAuth2Auth(FHIRAuth):
         exchange = self._code_exchange_params(code)
         return self._request_access_token(server, exchange)
     
-    def _code_exchange_params(self, code):
+    @staticmethod
+    def get_key(keyfile):
+        if not keyfile or not Path.is_file(Path(keyfile)):
+            raise ValueError('Argument keyfile empty or not a file')
+
+        with open(keyfile, 'rb') as f: # TODO: test open(keyfile, 'rb')
+            key = f.read().rstrip()
+        f.close()
+        return key
+
+
+    def sign_jwt(self, secret):
+              # secret =  client key
+             token = JWTRS384Generator(issuer=self.app_id, token_uri=self._token_uri)
+             signed_jwt = token._generate_signed_jwt(client_secret=secret) # TODO: redundant...just use a return
+             return signed_jwt
+
+    #    client.sign_jwt(get_key(Path(keyfile)), jwt_endpoint)
+
+
+    def _code_exchange_params(self, auth_exchange_instance_value):
         """ These parameters are used by to exchange the given code for an
         access token.
         """
-        return {
-            'client_id': self.app_id,
-            'code': code,
-            'grant_type': 'authorization_code',
-            'redirect_uri': self._redirect_uri,
-            'state': self.auth_state,
-        }
+        # TODO implement make_signed_jwt function to create the "code"
+        # TODO: implement client_credentials
+        # use client_credentials (JWT stuff)
+        if self._authorize_uri is None:
+
+            exchange_params =  {
+                'grant_type': "client_credentials",
+                'client_assertion_type': "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+                'client_assertion' : auth_exchange_instance_value # signed JWT
+            }
+        
+        else: # use the old default authorization code 
+            exchange_params = {
+                'client_id': self.app_id,
+                'code': auth_exchange_instance_value, # code
+                'grant_type': 'authorization_code',
+                'redirect_uri': self._redirect_uri,
+                'state': self.auth_state,
+            }
+
+        return exchange_params
     
     
     def _request_access_token(self, server, params):
@@ -277,6 +351,10 @@ class FHIROAuth2Auth(FHIRAuth):
         auth = None
         if self.app_secret:
             auth = (self.app_id, self.app_secret)
+
+        # TODO: else if client_credentials
+        # auth None : set before if statement above
+        # seems I can just do this as is (params has the headers needed and auth is None)        
         ret_params = server.post_as_form(self._token_uri, params, auth).json()
         
         self.access_token = ret_params.get('access_token')
@@ -400,5 +478,8 @@ class FHIROAuth2Auth(FHIRAuth):
 # register classes
 FHIRAuth.register()
 FHIROAuth2Auth.register()
+
+
+
 
 
