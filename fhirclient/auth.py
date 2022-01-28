@@ -352,9 +352,7 @@ class FHIROAuth2Auth(FHIRAuth):
         if self.app_secret:
             auth = (self.app_id, self.app_secret)
 
-        # TODO: else if client_credentials
-        # auth None : set before if statement above
-        # seems I can just do this as is (params has the headers needed and auth is None)        
+     
         ret_params = server.post_as_form(self._token_uri, params, auth).json()
         
         self.access_token = ret_params.get('access_token')
