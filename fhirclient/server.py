@@ -5,7 +5,10 @@ import requests
 import urllib
 import logging
 
-import urllib.parse as urlparse
+try:                                # Python 2.x
+    import urlparse
+except ImportError as e:            # Python 3
+    import urllib.parse as urlparse
 
 from auth import FHIRAuth
 
